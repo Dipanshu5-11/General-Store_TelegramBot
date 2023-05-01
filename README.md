@@ -1,4 +1,4 @@
-# GShoppingSherpa_TelegramBot
+# ShoppingSherpa_TelegramBot
 
 
 This project is a Python script for a Telegram bot that interacts with a Firebase database. The bot is designed to simulate an online store where users can view inventory items, place orders, and receive information about the store.
