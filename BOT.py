@@ -6,12 +6,12 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 
 # Fetch the service account key JSON file contents
-cred = credentials.Certificate('Google Firebase JSON Key Directory')
+cred = credentials.Certificate('Firebase databse json key path')
 
 # Initialize the Firebase app with the service account credentials
 try:
     firebase_admin.initialize_app(cred, {
-        'databaseURL': 'URL of Google Firebase Dataset'
+        'databaseURL': 'Firebase database URL'
     })
 except ValueError:
     pass  # App is already initialized
@@ -19,9 +19,26 @@ except ValueError:
 # Define a reference to the inventory items node
 inventory_ref = db.reference('inventory_items')
 
+
+def help_command(update, context):
+    command_list = [
+        "/start - View inventory items",
+        "/hi - Say hi to the bot",
+        "/order - Order a product",
+        "/about - Learn about Ajay General Store",
+        "/profilepic - Show bot profile picture",
+        "/healthyfood - Show picture of healthy groceries",
+        "/gl - Show picture of grocery list",
+        "/veg - Show picture of vegetables list",
+        "/help_command - Show list of available commands",
+        "/besafe - A message from us to our customers"
+    ]
+    update.message.reply_text("Here are the available commands:\n" + "\n".join(command_list))
+
+
 # Define a function to handle the /start command
 def start(update, context):
-    update.message.reply_text('Welcome to Ajay General Store! Here are our inventory items:\n Name - Price, Brand, Type, Weight, Remaining_Quantity')
+    update.message.reply_text('Welcome to Ajay General Store! Here are our inventory items:\nType /help_command to see all the commands\n\n\nBelow is the list of Items availabe for Delivery\n\n\n Name - Price, Brand, Type, Weight, Remaining_Quantity')
 
     # Get the inventory items from the database
     inventory_items = inventory_ref.get()
@@ -36,81 +53,30 @@ def hi(update, context):
     update.message.reply_text('Hello! Welcome to Ajay General Store. You can use the following commands:\n/start - View inventory items\n/hi - Say hi to the bot')
 
 
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ConversationHandler
+orders_ref = db.reference('orders')
 
-# Define the states of the conversation
-PRODUCT_NAME, QUANTITY, ADDRESS, CONFIRMATION = range(4)
+# Define a function to handle user orders
+def order(update, context):
+    # Ask the user for the product name, quantity, and address
+    update.message.reply_text("Please enter your order details in the following format:\n\nProduct Name, Quantity, Address\n\nFor example, type:\n\nT-Shirt, 2, 123 Main St.")
 
-# Define a function to start the conversation
-def start(update, context):
-    # Ask the user for the product name
-    update.message.reply_text("Please enter the product name:")
-    return PRODUCT_NAME
+    # Wait for the user's response and split it into the product name, quantity, and address
+    order_details = context.bot.wait_for_message(chat_id=update.message.chat_id).text.split(",")
+    product_name = order_details[0].strip()
+    quantity = order_details[1].strip()
+    address = order_details[2].strip()
 
-# Define a function to get the product name from the user
-def get_product_name(update, context):
-    # Store the product name in the context
-    context.user_data['product_name'] = update.message.text
-    
-    # Ask the user for the quantity
-    update.message.reply_text("Please enter the quantity:")
-    return QUANTITY
+    # Create a new order object and write it to the database
+    new_order = {
+        'product_name': product_name,
+        'quantity': quantity,
+        'address': address
+    }
+    order_id = orders_ref.push(new_order).key
 
-# Define a function to get the quantity from the user
-def get_quantity(update, context):
-    # Store the quantity in the context
-    context.user_data['quantity'] = update.message.text
-    
-    # Ask the user for the delivery address
-    update.message.reply_text("Please enter the delivery address:")
-    return ADDRESS
+    # Print a message indicating that the order has been accepted
+    update.message.reply_text(f"Thank you for your order of {quantity} {product_name}. Your order will be delivered to {address}. Your order ID is {order_id}.")
 
-# Define a function to get the address from the user
-def get_address(update, context):
-    # Store the address in the context
-    context.user_data['address'] = update.message.text
-    
-    # Get the inventory items from the database
-    inventory_items = inventory_ref.get()
-    
-    # Check if the product exists in the inventory
-    if context.user_data['product_name'] not in inventory_items:
-        update.message.reply_text(f"Sorry, {context.user_data['product_name']} is not available in our inventory.")
-        return ConversationHandler.END
-    
-    # Check if the requested quantity is available in the inventory
-    if int(context.user_data['quantity']) > inventory_items[context.user_data['product_name']]['remaining_quantity']:
-        update.message.reply_text(f"Sorry, we only have {inventory_items[context.user_data['product_name']]['remaining_quantity']} {context.user_data['product_name']} left in stock.")
-        return ConversationHandler.END
-    
-    # Display the total cost of the order and ask for confirmation
-    total_cost = float(inventory_items[context.user_data['product_name']]['price']) * int(context.user_data['quantity'])
-    update.message.reply_text(f"The total cost of your order is ₹ {total_cost}. Do you want to confirm your order? Please type 'yes' to confirm.", reply_markup=ReplyKeyboardMarkup([['yes', 'no']], one_time_keyboard=True))
-    
-    return CONFIRMATION
-
-# Define a function to confirm the order
-def confirm_order(update, context):
-    # Get the user's confirmation
-    confirmation = update.message.text.lower()
-    
-    if confirmation == 'yes':
-        # Place the order and send a confirmation message
-        update.message.reply_text(f"Thank you for your order of {context.user_data['quantity']} {context.user_data['product_name']}. Your order will be delivered to {context.user_data['address']}.")
-    else:
-        # Cancel the order and send a message indicating that the order has been cancelled
-        update.message.reply_text("Your order has been cancelled.")
-    
-    # End the conversation
-    return ConversationHandler.END
-
-# Define a function to cancel the conversation
-def cancel(update, context):
-    update.message.reply_text("Order cancelled.", reply_markup=ReplyKeyboardRemove())
-    return Conversation
-
-    
 
 # Define a function to handle the /about command
 def about(update, context):
@@ -127,26 +93,26 @@ def profilepic(update, context):
     context.bot.send_photo(chat_id=chat_id, photo=photo_url)
 
 
-#healthy grocery pic 
+#healthy grocery pic
 def healthyfood(update, context):
     # Send the profile picture as a photo
     chat_id = update.message.chat_id
-    photo_url = 'https://images.app.goo.gl/ZbhrU1LgyfNBHAQm6'  
+    photo_url = 'https://images.app.goo.gl/ZbhrU1LgyfNBHAQm6'
     context.bot.send_photo(chat_id=chat_id, photo=photo_url)
-    
+
 #grocerylist
 def gl(update, context):
     # Send the profile picture as a photo
     chat_id = update.message.chat_id
-    photo_url = 'https://images.app.goo.gl/1U7wyiSr2fKYKPzMA'  
+    photo_url = 'https://images.app.goo.gl/1U7wyiSr2fKYKPzMA'
     context.bot.send_photo(chat_id=chat_id, photo=photo_url)
-    
-    
+
+
 #vegetableslist
 def veg(update, context):
     # Send the profile picture as a photo
     chat_id = update.message.chat_id
-    photo_url = 'https://images.app.goo.gl/wx4t8xdJEzWAyJjT7'  
+    photo_url = 'https://images.app.goo.gl/wx4t8xdJEzWAyJjT7'
     context.bot.send_photo(chat_id=chat_id, photo=photo_url)
 
 
@@ -156,8 +122,8 @@ def veg(update, context):
 def besafe(update, context):
     # Send the profile picture as a photo
     chat_id = update.message.chat_id
-    photo_url = 'https://images.app.goo.gl/Rqb6etESKHLS4MCw9'  
-    message = """Dear customers, 
+    photo_url = 'https://images.app.goo.gl/Rqb6etESKHLS4MCw9'
+    message = """Dear customers,
 Your health and safety are our top priorities. As we navigate through these challenging times, we kindly ask you to take necessary precautions when visiting our store. Please:
 - Wear a mask
 - Maintain social distancing
@@ -169,11 +135,11 @@ We appreciate your cooperation and understanding during these uncertain times. L
 
     context.bot.send_photo(chat_id=chat_id, photo=photo_url, caption=message, parse_mode='Markdown')
 
-    
-    
+
+
 
 # Create a Telegram bot using the bot token provided by BotFather
-updater = Updater('6140839635:AAH_x9eoanvgFSWwlKFvMBiyRUQ672A7ZkE', use_context=True)
+updater = Updater('Telegram BOT api key', use_context=True)
 
 
 # Set up CommandHandlers to handle the /start, /hi, /about, and /order commands
@@ -186,6 +152,9 @@ updater.dispatcher.add_handler(CommandHandler('healthyfood', healthyfood))
 updater.dispatcher.add_handler(CommandHandler('gl', gl))
 updater.dispatcher.add_handler(CommandHandler('veg', veg))
 updater.dispatcher.add_handler(CommandHandler('besafe', besafe))
+updater.dispatcher.add_handler(CommandHandler('help_command', help_command))
+
+
 
 
 # Start the bot
